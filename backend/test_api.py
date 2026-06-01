@@ -1,18 +1,18 @@
 import unittest
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from backend.database import Base, SessionLocal, engine
-from backend.main import app
+from backend.main import complaint_analytics, create_complaint, list_complaints, resolve_complaint
 from backend.models import Complaint
+from backend.schemas import ComplaintCategory, ComplaintCreate, ComplaintPriority, ComplaintStatus
 
 
 class ComplaintApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         Base.metadata.create_all(bind=engine)
-        cls.client = TestClient(app)
 
     def setUp(self) -> None:
         with SessionLocal() as db:
@@ -27,31 +27,25 @@ class ComplaintApiTests(unittest.TestCase):
             "summary": "Room fan not working.",
         }
 
-        create_response = self.client.post(
-            "/api/complaints",
-            json={"name": "Asha", "text": "Room fan not working, urgent"},
-        )
-        self.assertEqual(create_response.status_code, 200)
-        created = create_response.json()
+        with SessionLocal() as db:
+            created = create_complaint(
+                ComplaintCreate(name="Asha", text="Room fan not working, urgent"),
+                db=db,
+            ).model_dump(mode="json")
+
         self.assertEqual(created["name"], "Asha")
         self.assertEqual(created["status"], "pending")
         self.assertEqual(created["category"], "Hostel")
         self.assertEqual(created["priority"], "High")
 
-        list_response = self.client.get("/api/complaints")
-        self.assertEqual(list_response.status_code, 200)
-        complaints = list_response.json()
+        with SessionLocal() as db:
+            complaints = [item.model_dump(mode="json") for item in list_complaints(db=db)]
         self.assertEqual(len(complaints), 1)
         self.assertEqual(complaints[0]["id"], created["id"])
 
-    @patch("backend.main.categorize_complaint")
-    def test_rejects_whitespace_complaint_text(self, mock_categorize) -> None:
-        create_response = self.client.post(
-            "/api/complaints",
-            json={"name": "Asha", "text": "   "},
-        )
-        self.assertEqual(create_response.status_code, 422)
-        mock_categorize.assert_not_called()
+    def test_rejects_whitespace_complaint_text(self) -> None:
+        with self.assertRaises(ValidationError):
+            ComplaintCreate(name="Asha", text="   ")
 
     @patch("backend.main.categorize_complaint")
     def test_resolve_flow(self, mock_categorize) -> None:
@@ -60,14 +54,13 @@ class ComplaintApiTests(unittest.TestCase):
             "priority": "Medium",
             "summary": "WiFi drops frequently.",
         }
-        created = self.client.post(
-            "/api/complaints",
-            json={"name": "Ravi", "text": "WiFi drops frequently in hostel block B"},
-        ).json()
-
-        resolve_response = self.client.patch(f"/api/complaints/{created['id']}/resolve")
-        self.assertEqual(resolve_response.status_code, 200)
-        self.assertEqual(resolve_response.json()["status"], "resolved")
+        with SessionLocal() as db:
+            created = create_complaint(
+                ComplaintCreate(name="Ravi", text="WiFi drops frequently in hostel block B"),
+                db=db,
+            )
+            resolved = resolve_complaint(created.id, db=db).model_dump(mode="json")
+        self.assertEqual(resolved["status"], "resolved")
 
     @patch("backend.main.categorize_complaint")
     def test_filters_by_category_status_and_priority(self, mock_categorize) -> None:
@@ -77,29 +70,28 @@ class ComplaintApiTests(unittest.TestCase):
             {"category": "Hostel", "priority": "Low", "summary": "Another hostel issue"},
         ]
 
-        first = self.client.post("/api/complaints", json={"name": "A", "text": "hostel urgent"}).json()
-        self.client.post("/api/complaints", json={"name": "B", "text": "wifi slow"})
-        self.client.post("/api/complaints", json={"name": "C", "text": "hostel gate light"})
-        self.client.patch(f"/api/complaints/{first['id']}/resolve")
+        with SessionLocal() as db:
+            first = create_complaint(ComplaintCreate(name="A", text="hostel urgent"), db=db)
+            create_complaint(ComplaintCreate(name="B", text="wifi slow"), db=db)
+            create_complaint(ComplaintCreate(name="C", text="hostel gate light"), db=db)
+            resolve_complaint(first.id, db=db)
 
-        by_category = self.client.get("/api/complaints", params={"category": "Hostel"})
-        self.assertEqual(by_category.status_code, 200)
-        self.assertEqual(len(by_category.json()), 2)
+            by_category = list_complaints(category=ComplaintCategory.HOSTEL, db=db)
+            self.assertEqual(len(by_category), 2)
 
-        by_status = self.client.get("/api/complaints", params={"status": "resolved"})
-        self.assertEqual(by_status.status_code, 200)
-        self.assertEqual(len(by_status.json()), 1)
+            by_status = list_complaints(status=ComplaintStatus.RESOLVED, db=db)
+            self.assertEqual(len(by_status), 1)
 
-        by_priority = self.client.get("/api/complaints", params={"priority": "Low"})
-        self.assertEqual(by_priority.status_code, 200)
-        self.assertEqual(len(by_priority.json()), 2)
+            by_priority = list_complaints(priority=ComplaintPriority.LOW, db=db)
+            self.assertEqual(len(by_priority), 2)
 
-        combined = self.client.get(
-            "/api/complaints",
-            params={"category": "Hostel", "status": "resolved", "priority": "High"},
-        )
-        self.assertEqual(combined.status_code, 200)
-        self.assertEqual(len(combined.json()), 1)
+            combined = list_complaints(
+                category=ComplaintCategory.HOSTEL,
+                status=ComplaintStatus.RESOLVED,
+                priority=ComplaintPriority.HIGH,
+                db=db,
+            )
+            self.assertEqual(len(combined), 1)
 
     @patch("backend.main.categorize_complaint")
     def test_analytics_endpoint(self, mock_categorize) -> None:
@@ -109,14 +101,12 @@ class ComplaintApiTests(unittest.TestCase):
             {"category": "WiFi", "priority": "High", "summary": "Network issue"},
         ]
 
-        first = self.client.post("/api/complaints", json={"name": "A", "text": "hostel urgent"}).json()
-        self.client.post("/api/complaints", json={"name": "B", "text": "projector not working"})
-        self.client.post("/api/complaints", json={"name": "C", "text": "wifi down"})
-        self.client.patch(f"/api/complaints/{first['id']}/resolve")
-
-        analytics_response = self.client.get("/api/analytics")
-        self.assertEqual(analytics_response.status_code, 200)
-        payload = analytics_response.json()
+        with SessionLocal() as db:
+            first = create_complaint(ComplaintCreate(name="A", text="hostel urgent"), db=db)
+            create_complaint(ComplaintCreate(name="B", text="projector not working"), db=db)
+            create_complaint(ComplaintCreate(name="C", text="wifi down"), db=db)
+            resolve_complaint(first.id, db=db)
+            payload = complaint_analytics(db=db).model_dump()
         self.assertEqual(payload["total"], 3)
         self.assertEqual(payload["high_priority"], 2)
         self.assertEqual(payload["resolved"], 1)

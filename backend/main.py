@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -84,9 +84,9 @@ def create_complaint(payload: ComplaintCreate, db: Session = Depends(get_db)) ->
 
 @app.get("/api/complaints", response_model=list[ComplaintResponse])
 def list_complaints(
-    category: ComplaintCategory | None = Query(default=None),
-    status: ComplaintStatus | None = Query(default=None),
-    priority: ComplaintPriority | None = Query(default=None),
+    category: ComplaintCategory | None = None,
+    status: ComplaintStatus | None = None,
+    priority: ComplaintPriority | None = None,
     db: Session = Depends(get_db),
 ) -> list[ComplaintResponse]:
     query = db.query(Complaint)
