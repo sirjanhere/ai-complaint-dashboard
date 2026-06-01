@@ -1,30 +1,52 @@
 # AI Complaint Categorizer Dashboard
 
-Initial project scaffold for an AI-powered complaint categorization dashboard.
+AI-powered complaint categorization dashboard with a FastAPI backend.
 
-## Backend Setup
-
-The backend is set up with FastAPI and prepared for Gemini-powered categorization.
-
-### Structure
+## Backend Structure
 
 ```text
 backend/
-├── main.py
+├── ai.py
 ├── database.py
+├── main.py
 └── models.py
 ```
 
-### Dependencies
+## Setup
 
-Defined in `requirements.txt`:
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run backend server:
+
+```bash
+uvicorn backend.main:app --reload
+```
+
+## API Endpoints
+
+- `POST /api/complaints`
+  - Body: `{ "name": "string", "text": "string" }`
+  - Returns created complaint with AI-generated `category`, `priority`, and `summary`.
+
+- `GET /api/complaints`
+  - Returns all complaints for dashboard listing.
+
+- `PATCH /api/complaints/{complaint_id}/resolve`
+  - Marks a complaint as `resolved`.
+
+## Dependencies
+
+Defined in `/tmp/workspace/sirjanhere/ai-complaint-dashboard/requirements.txt`:
 - fastapi
 - uvicorn
 - sqlalchemy
 - google-generativeai
 
-## Next Steps
+## Notes
 
-- Integrate Gemini complaint categorization
-- Implement complaint CRUD APIs
-- Connect frontend dashboard
+- Set `GEMINI_API_KEY` to use Gemini classification.
+- If no API key is set, backend uses a fallback local categorization flow.
