@@ -11,6 +11,8 @@ The backend is set up with FastAPI and prepared for Gemini-powered categorizatio
 ```text
 backend/
 ├── main.py
+├── database.py
+└── models.py
 ```
 
 ### Dependencies
@@ -23,7 +25,6 @@ Defined in `requirements.txt`:
 
 ## Next Steps
 
-- Add database models and SQLite configuration
 - Integrate Gemini complaint categorization
 - Implement complaint CRUD APIs
 - Connect frontend dashboard
