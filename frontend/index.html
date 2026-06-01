@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Complaint Dashboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>AI Complaint Dashboard</h1>
+
+      <section class="panel">
+        <h2>Submit Complaint</h2>
+        <form id="complaint-form">
+          <label>
+            Name
+            <input id="name" name="name" maxlength="100" required />
+          </label>
+          <label>
+            Complaint
+            <textarea id="text" name="text" rows="4" required></textarea>
+          </label>
+          <button type="submit">Submit</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Analytics</h2>
+        <div class="analytics">
+          <p>Total: <strong id="total-count">0</strong></p>
+          <p>High Priority: <strong id="high-priority-count">0</strong></p>
+          <p>Resolved: <strong id="resolved-count">0</strong></p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Complaints</h2>
+        <div class="filters">
+          <select id="category-filter">
+            <option value="">All Categories</option>
+            <option value="WiFi">WiFi</option>
+            <option value="Hostel">Hostel</option>
+            <option value="Electricity">Electricity</option>
+            <option value="Classroom">Classroom</option>
+            <option value="Other">Other</option>
+          </select>
+          <select id="status-filter">
+            <option value="">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="resolved">Resolved</option>
+          </select>
+          <select id="priority-filter">
+            <option value="">All Priority</option>
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+          </select>
+          <button id="apply-filters" type="button">Apply Filters</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Complaint</th>
+              <th>Category</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="complaints-body"></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

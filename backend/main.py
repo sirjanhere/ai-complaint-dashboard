@@ -1,12 +1,30 @@
-from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.ai import categorize_complaint
 from backend.database import Base, SessionLocal, engine
 from backend.models import Complaint
+from backend.schemas import (
+    ComplaintAnalyticsResponse,
+    ComplaintCategory,
+    ComplaintCreate,
+    ComplaintPriority,
+    ComplaintResponse,
+    ComplaintStatus,
+    ResolveComplaintResponse,
+)
 
 app = FastAPI(title="AI Complaint Categorizer Backend")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
@@ -22,35 +40,26 @@ def get_db() -> Session:
         db.close()
 
 
-class ComplaintCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    text: str = Field(..., min_length=1)
-
-
-class ComplaintResponse(BaseModel):
-    id: int
-    name: str
-    text: str
-    category: str | None
-    priority: str | None
-    summary: str | None
-    status: str
-
-
-class ResolveComplaintResponse(BaseModel):
-    id: int
-    status: str
-
-
 def _serialize_complaint(complaint: Complaint) -> ComplaintResponse:
+    category = (
+        complaint.category if complaint.category in {item.value for item in ComplaintCategory} else None
+    )
+    priority = (
+        complaint.priority if complaint.priority in {item.value for item in ComplaintPriority} else None
+    )
+    status = (
+        ComplaintStatus.RESOLVED
+        if complaint.status == ComplaintStatus.RESOLVED.value
+        else ComplaintStatus.PENDING
+    )
     return ComplaintResponse(
         id=complaint.id,
         name=complaint.name,
         text=complaint.text,
-        category=complaint.category,
-        priority=complaint.priority,
+        category=category,
+        priority=priority,
         summary=complaint.summary,
-        status=complaint.status,
+        status=status,
     )
 
 
@@ -64,7 +73,7 @@ def create_complaint(payload: ComplaintCreate, db: Session = Depends(get_db)) ->
         category=ai_result.get("category"),
         priority=ai_result.get("priority"),
         summary=ai_result.get("summary"),
-        status="pending",
+        status=ComplaintStatus.PENDING.value,
     )
     db.add(complaint)
     db.commit()
@@ -74,8 +83,20 @@ def create_complaint(payload: ComplaintCreate, db: Session = Depends(get_db)) ->
 
 
 @app.get("/api/complaints", response_model=list[ComplaintResponse])
-def list_complaints(db: Session = Depends(get_db)) -> list[ComplaintResponse]:
-    complaints = db.query(Complaint).order_by(Complaint.id.desc()).all()
+def list_complaints(
+    category: ComplaintCategory | None = Query(default=None),
+    status: ComplaintStatus | None = Query(default=None),
+    priority: ComplaintPriority | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> list[ComplaintResponse]:
+    query = db.query(Complaint)
+    if category is not None:
+        query = query.filter(Complaint.category == category.value)
+    if status is not None:
+        query = query.filter(Complaint.status == status.value)
+    if priority is not None:
+        query = query.filter(Complaint.priority == priority.value)
+    complaints = query.order_by(Complaint.id.desc()).all()
     return [_serialize_complaint(complaint) for complaint in complaints]
 
 
@@ -85,8 +106,21 @@ def resolve_complaint(complaint_id: int, db: Session = Depends(get_db)) -> Resol
     if complaint is None:
         raise HTTPException(status_code=404, detail="Complaint not found")
 
-    complaint.status = "resolved"
+    complaint.status = ComplaintStatus.RESOLVED.value
     db.commit()
     db.refresh(complaint)
 
-    return ResolveComplaintResponse(id=complaint.id, status=complaint.status)
+    return ResolveComplaintResponse(id=complaint.id, status=ComplaintStatus.RESOLVED)
+
+
+@app.get("/api/analytics", response_model=ComplaintAnalyticsResponse)
+def complaint_analytics(db: Session = Depends(get_db)) -> ComplaintAnalyticsResponse:
+    total = db.query(func.count(Complaint.id)).scalar() or 0
+    high_priority = db.query(func.count(Complaint.id)).filter(Complaint.priority == "High").scalar() or 0
+    resolved = (
+        db.query(func.count(Complaint.id))
+        .filter(Complaint.status == ComplaintStatus.RESOLVED.value)
+        .scalar()
+        or 0
+    )
+    return ComplaintAnalyticsResponse(total=total, high_priority=high_priority, resolved=resolved)

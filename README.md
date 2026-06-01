@@ -9,7 +9,9 @@ backend/
 ├── ai.py
 ├── database.py
 ├── main.py
-└── models.py
+├── models.py
+├── schemas.py
+└── test_api.py
 ```
 
 ## Setup
@@ -33,10 +35,25 @@ uvicorn backend.main:app --reload
   - Returns created complaint with AI-generated `category`, `priority`, and `summary`.
 
 - `GET /api/complaints`
-  - Returns all complaints for dashboard listing.
+  - Query params (optional): `category`, `status`, `priority`
+  - Returns complaints for dashboard listing with filters.
+
+- `GET /api/analytics`
+  - Returns complaint summary counts: `total`, `high_priority`, `resolved`.
 
 - `PATCH /api/complaints/{complaint_id}/resolve`
   - Marks a complaint as `resolved`.
+
+## Frontend (starter)
+
+A basic frontend starter is included in `frontend/`:
+
+- `index.html` with complaint form + dashboard table
+- filter controls for category/status/priority
+- resolve action wired to `PATCH /api/complaints/{id}/resolve`
+- analytics cards wired to `GET /api/analytics`
+
+Open `/tmp/workspace/sirjanhere/ai-complaint-dashboard/frontend/index.html` in a browser while backend is running.
 
 ## Dependencies
 
